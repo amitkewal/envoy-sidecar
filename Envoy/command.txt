@@ -1,0 +1,11 @@
+wsl --update
+wsl --shutdown
+
+https://www.envoyproxy.io/docs/envoy/latest/start/quick-start/securing
+
+https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/connect_grpc_bridge_filter
+
+https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/local_rate_limit_filter
+
+
+https://sweetcode.io/how-to-use-local-docker-images-in-kubernetes/

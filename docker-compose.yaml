@@ -1,0 +1,15 @@
+version: '3'
+services:
+  envoygateway:
+    build: Envoy/
+    ports:
+      - "9901:9901"
+      - "10000:10000"
+      - "10001:10001"
+    volumes:
+      - ./Envoy/envoy.yaml:/etc/envoy/envoy.yaml
+      # - ./Envoy/https.crt:/etc/ssl/certs/https.crt
+  flaskapi:
+    build: PythonCode/
+    # ports:
+    #   - "5000:5000"
