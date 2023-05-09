@@ -20,6 +20,18 @@ static_resources:
       - name: envoy.filters.network.http_connection_manager
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          generate_request_id: true
+          tracing:
+            provider:
+              name: envoy.tracers.opentelemetry
+              typed_config:
+                "@type": type.googleapis.com/envoy.config.trace.v3.OpenTelemetryConfig
+                grpc_service:
+                  envoy_grpc:
+                    cluster_name: opentelemetry_collector
+                  timeout: 0.250s
+                service_name: front-envoy
+          codec_type: AUTO
           stat_prefix: ingress_http
           access_log:
           - name: envoy.access_loggers.stdout
@@ -35,6 +47,7 @@ static_resources:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
               stat_prefix: http_local_rate_limiter
+          
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router  
@@ -49,7 +62,11 @@ static_resources:
                 route:
                   prefix_rewrite: "/hello"
                   cluster: flask_service
-
+              - match:
+                  prefix: "/roll"
+                route:
+                  prefix_rewrite: "/roll"
+                  cluster: flask_service
   clusters:
   - name: flask_service
     type: LOGICAL_DNS
@@ -62,7 +79,8 @@ static_resources:
         - endpoint:
             address:
               socket_address:
-                address: localhost
+                address: flaskapi #docker-compose
+                # address: localhost #kubectl
                 port_value: 5000
     circuit_breakers:
       thresholds:
@@ -72,7 +90,7 @@ static_resources:
         max_retries: 1
     health_checks:
       timeout: 5s
-      interval: 5s
+      interval: 15s
       unhealthy_threshold: 3
       healthy_threshold: 3
       no_traffic_interval: 60s
@@ -80,3 +98,21 @@ static_resources:
       always_log_health_check_failures: true
       http_health_check:
         path: /hello
+  - name: opentelemetry_collector  #https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/examples/demo/docker-compose.yaml
+    type: STRICT_DNS              #https://github.com/envoyproxy/envoy/tree/main/examples/opentelemetry
+    lb_policy: ROUND_ROBIN
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        explicit_http_config:
+          http2_protocol_options: {}
+    load_assignment:
+      cluster_name: opentelemetry_collector
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: opentelemetry #docker-compose
+                # address: localhost #kubectl
+                port_value: 55679

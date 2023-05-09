@@ -26,6 +26,18 @@ data:
           - name: envoy.filters.network.http_connection_manager
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+              generate_request_id: true
+              tracing:
+                provider:
+                  name: envoy.tracers.opentelemetry
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.config.trace.v3.OpenTelemetryConfig
+                    grpc_service:
+                      envoy_grpc:
+                        cluster_name: opentelemetry_collector
+                      timeout: 0.250s
+                    service_name: front-envoy
+              codec_type: AUTO
               stat_prefix: ingress_http
               access_log:
               - name: envoy.access_loggers.stdout
@@ -41,6 +53,7 @@ data:
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
                   stat_prefix: http_local_rate_limiter
+              
               - name: envoy.filters.http.router
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router  
@@ -55,6 +68,11 @@ data:
                     route:
                       prefix_rewrite: "/hello"
                       cluster: flask_service
+                  - match:
+                      prefix: "/roll"
+                    route:
+                      prefix_rewrite: "/roll"
+                      cluster: flask_service
 
       clusters:
       - name: flask_service
@@ -68,7 +86,8 @@ data:
             - endpoint:
                 address:
                   socket_address:
-                    address: 0.0.0.0
+                    # address: flaskapi #docker-compose
+                    address: localhost #kubectl
                     port_value: 5000
         circuit_breakers:
           thresholds:
@@ -77,8 +96,8 @@ data:
             # max_requests: 48  # not for HTTP/1.1
             max_retries: 1
         health_checks:
-          timeout: 2s
-          interval: 1s
+          timeout: 5s
+          interval: 5s
           unhealthy_threshold: 3
           healthy_threshold: 3
           no_traffic_interval: 60s
@@ -86,6 +105,25 @@ data:
           always_log_health_check_failures: true
           http_health_check:
             path: /hello
+      - name: opentelemetry_collector  #https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/examples/demo/docker-compose.yaml
+        type: STRICT_DNS              #https://github.com/envoyproxy/envoy/tree/main/examples/opentelemetry
+        lb_policy: ROUND_ROBIN
+        typed_extension_protocol_options:
+          envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+            "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+            explicit_http_config:
+              http2_protocol_options: {}
+        load_assignment:
+          cluster_name: opentelemetry_collector
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    # address: opentelemetry #docker-compose
+                    address: localhost #kubectl
+                    port_value: 55679
+
 
 ---
 
@@ -133,6 +171,33 @@ spec:
           - containerPort: 5000
             name: flaskapi
 
+      - name: open-collector
+        image: envoy-opentelemetry:latest
+        imagePullPolicy: Never
+        ports:
+          - containerPort: 4317
+            name: collector
+            
+      - name: envoy-prometheus
+        image: envoy-prometheus:latest
+        imagePullPolicy: Never
+        ports:
+          - containerPort: 9090
+            name: prometheus
+
+      # - name: openzipkin-zipkin
+      #   # imagePullPolicy: Never
+      #   image: openzipkin/zipkin:latest
+      #   env:
+      #     - name: port
+      #       value: "9411"
+      #   ports:
+      #     - containerPort: 9411
+      #       name: zipkin
+
+
+
+
 ---
 
 apiVersion: v1
@@ -152,33 +217,34 @@ spec:
       protocol: TCP
       port: 10000
       targetPort: 10000
+    - name: prometheus
+      protocol: TCP
+      port: 4317
+      targetPort: 4317
+    - name: flaskapi
+      protocol: TCP
+      port: 5000
+      targetPort: 5000
+
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: opentelemetry
+spec:
+  type: ClusterIP
+  selector:
+    app: app-envoy-sidecar
+  ports:
+    - name: opetelemetry
+      protocol: TCP
+      port: 4317
+      targetPort: 4317
 
 
 
-# ---
-
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: app-envoy-sidecar-svc
-# spec:
-#   type: ClusterIP
-#   selector:
-#     app: app-envoy-sidecar
-#   ports:
-#   - name: app-envoy-sidecar-svc-port
-#     protocol: TCP
-#     port: 9901
-#     targetPort: envoy-adminport
-#   ports:
-#     - name: admin
-#       protocol: TCP
-#       port: 9901
-#       targetPort: 9901
-#     - name: web-proxy
-#       protocol: TCP
-#       port: 10000
-#       targetPort: 10000
 
 
 ---

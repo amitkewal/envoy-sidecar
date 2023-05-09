@@ -9,3 +9,5 @@ https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/loca
 
 
 https://sweetcode.io/how-to-use-local-docker-images-in-kubernetes/
+
+https://www.cncf.io/blog/2022/04/22/opentelemetry-and-python-a-complete-instrumentation-guide/
