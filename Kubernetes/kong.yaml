@@ -17,6 +17,14 @@ data:
          "limit_by": "ip",
          "minute": 100
            }
+        },
+        {
+          "name": "opentelemetry"
+          "service": "app-envoy-sidecar-svc"
+          config: 
+            endpoint: http://opentelemetry.collector:4318/v1/traces
+            headers:
+              X-Auth-Token: secret-token
         }]
         routes:
           - tags:
@@ -192,46 +200,3 @@ spec:
        - name: kong-config-volume
          configMap:
            name: kong-config
-
-# ---
-# apiVersion: apps/v1
-# kind: Deployment
-# metadata:
-#   name: demo-service
-#   labels:
-#     app: demo-service
-# spec:
-#   replicas: 1
-#   selector:
-#     matchLabels:
-#       app: demo-service
-#   template:
-#     metadata:
-#       labels:
-#         app: demo-service
-#     spec:
-#       containers:
-#       - name: demo-service
-#         image: arungupta/helloworld-spring-boot:latest
-#         ports:
-#         - containerPort: 80
-#         - containerPort: 443
-# ---
-
-# apiVersion: networking.k8s.io/v1
-# kind: Ingress
-# metadata:
-#   name: my-app
-# spec:
-#   ingressClassName: kong
-#   rules:
-#   - host: myapp.example.com
-#     http:
-#       paths:
-#       - path: /
-#         pathType: ImplementationSpecific
-#         backend:
-#           service:
-#             name: demo-service
-#             port:
-#               number: 80

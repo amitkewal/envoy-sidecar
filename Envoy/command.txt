@@ -11,3 +11,6 @@ https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/loca
 https://sweetcode.io/how-to-use-local-docker-images-in-kubernetes/
 
 https://www.cncf.io/blog/2022/04/22/opentelemetry-and-python-a-complete-instrumentation-guide/
+
+https://stackoverflow.com/questions/63485673/how-to-correctly-use-opentelemetry-exporter-with-opentelemetry-collector-in-clie
+https://github.com/open-telemetry/opentelemetry-js/blob/main/examples/opentelemetry-web/docker/prometheus.yaml

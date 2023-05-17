@@ -2,16 +2,52 @@ receivers:
   otlp:
     protocols:
       grpc:
+        endpoint: 0.0.0.0:4317
       http:
-
+        endpoint: 0.0.0.0:4318
+  # prometheus:
+  #   config:
+  #     scrape_configs:
+  #       - job_name: otel-collector
+  #         scrape_interval: 30s
+  #         metrics_path: /metrics
+  #         static_configs:
+  #           - targets: ['prometheus:9090']         
 exporters:
-  prometheus:
-    endpoint: prometheus:8889
-    namespace: default
+  # logging:
+  #   loglevel: info
+  zipkin:
+    endpoint: "http://0.0.0.0:9411/api/v2/spans"
+    tls:
+      insecure: true
+  jaeger:
+    endpoint: "http://jaeger:14250"
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+    retry_on_failure:
+      enabled: true
 
+  # prometheus:
+  #   endpoint: "0.0.0.0:8889"
+  # awsemf:
+  #   region: 'us-east-1'
+  #   resource_to_telemetry_conversion:
+  #     enabled: true  
+  # file:
+  #   path: /etc/otel/filename.json 
 service:
+  telemetry:
+    logs:
+      level: "debug"
   pipelines:
-    metrics:
+    traces:
       receivers: [otlp]
-      processors: []
-      exporters: [prometheus]
+      exporters: [jaeger]
+    # metrics:
+    #   receivers: [prometheus]
+    #   exporters: [prometheus]
+    # logs:
+    #   receivers: [otlp]
+    #   exporters: [prometheus]       

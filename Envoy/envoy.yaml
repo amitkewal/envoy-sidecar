@@ -21,6 +21,39 @@ static_resources:
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
           generate_request_id: true
+          # generate_request_id: false
+          stat_prefix: ingress_http
+          # Envoy will always set x-request-id header in response. If this is false or not set, the request ID is returned in responses only if tracing is forced using x-envoy-force-trace header
+          always_set_request_id_in_response: true
+          # File system based access logging.
+          access_log:
+          - name: envoy.access_loggers.file
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+              log_format:
+                json_format:
+                # https://www.envoyproxy.io/docs/envoy/latest/configuration/observability/access_log/usage#config-access-log-default-format
+                  start_time: "%START_TIME%"
+                  method: "%REQ(:METHOD)%"
+                  path: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+                  protocol: "%PROTOCOL%"
+                  response_code: "%RESPONSE_CODE%"
+                  response_flags: "%RESPONSE_FLAGS%"
+                  bytes_sent: "%BYTES_SENT%"
+                  duration: "%DURATION%"
+                  service_time: "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
+                  forwarded_for: "%REQ(X-FORWARDED-FOR)%"
+                  user_agent: "%REQ(USER-AGENT)%"
+                  request_id: "%REQ(X-REQUEST-ID)%"
+                  authority: "%REQ(:AUTHORITY)%"
+                  host: "%UPSTREAM_HOST%"
+                  traceparent: "%REQ(traceparent)%"
+                  trace_id: "%REQ(trace_id)%"
+                  x-b3-traceid: "%REQ(x-b3-traceid)%"
+                  x-b3-spanid: "%REQ(x-b3-spanid)%"
+                  x-b3-parentspanid: "%REQ(x-b3-parentspanid)%"
+                  b3: "%REQ(b3)%"
+                omit_empty_values: true
           tracing:
             provider:
               name: envoy.tracers.opentelemetry
@@ -30,7 +63,7 @@ static_resources:
                   envoy_grpc:
                     cluster_name: opentelemetry_collector
                   timeout: 0.250s
-                service_name: front-envoy
+                service_name: fastpi-envoy
           codec_type: AUTO
           stat_prefix: ingress_http
           access_log:
@@ -47,10 +80,10 @@ static_resources:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
               stat_prefix: http_local_rate_limiter
-          
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router  
+          codec_type: AUTO          
           route_config:
             name: local_route
             virtual_hosts:
@@ -115,4 +148,4 @@ static_resources:
               socket_address:
                 address: opentelemetry #docker-compose
                 # address: localhost #kubectl
-                port_value: 55679
+                port_value: 4318
