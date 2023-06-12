@@ -26,8 +26,8 @@ def roll():
         attributes={ "endpoint": "/roll" } 
     ):
 
-        sides = int(request.args.get('sides'))
-        rolls = int(request.args.get('rolls'))
+        sides = 5
+        rolls = 7
         return roll_sum(sides,rolls)
 
 def roll_sum(sides, rolls):

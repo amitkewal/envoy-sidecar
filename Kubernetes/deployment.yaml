@@ -1,7 +1,15 @@
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: sidecar
+
+---
+
+apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: envoy-config-volume
+  namespace: sidecar
+  name: envoy-config
 data:
   config.yaml: |
     admin:
@@ -44,11 +52,6 @@ data:
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
               http_filters:
-              - name: "envoy.filters.http.cache"
-                typed_config:
-                  "@type": "type.googleapis.com/envoy.extensions.filters.http.cache.v3.CacheConfig"
-                  typed_config:
-                    "@type": "type.googleapis.com/envoy.extensions.http.cache.simple_http_cache.v3.SimpleHttpCacheConfig"
               - name: envoy.filters.http.local_ratelimit
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
@@ -67,20 +70,19 @@ data:
                       prefix: "/h"
                     route:
                       prefix_rewrite: "/hello"
-                      cluster: flask_service
+                      cluster: flask-service
                   - match:
                       prefix: "/roll"
                     route:
                       prefix_rewrite: "/roll"
-                      cluster: flask_service
-
+                      cluster: flask-service
       clusters:
-      - name: flask_service
+      - name: flask-service
         type: LOGICAL_DNS
         # Comment out the following line to test on v6 networks
         dns_lookup_family: V4_ONLY
         load_assignment:
-          cluster_name: flask_service
+          cluster_name: flask-service
           endpoints:
           - lb_endpoints:
             - endpoint:
@@ -97,7 +99,7 @@ data:
             max_retries: 1
         health_checks:
           timeout: 5s
-          interval: 5s
+          interval: 15s
           unhealthy_threshold: 3
           healthy_threshold: 3
           no_traffic_interval: 60s
@@ -122,17 +124,50 @@ data:
                   socket_address:
                     # address: opentelemetry #docker-compose
                     address: localhost #kubectl
-                    port_value: 55679
-
+                    port_value: 4317
 
 ---
 
+
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   namespace: sidecar
+#   name: otel-collector-config
+# data:
+#   config.yaml: |
+#     receivers:
+#       otlp:
+#         protocols:
+#           grpc:
+#             endpoint: 0.0.0.0:4317
+#           http:
+#             endpoint: 0.0.0.0:4318
+
+#     exporters:
+#       # logging:
+#       #   loglevel: info
+
+#       jaeger:
+#         endpoint: "jaeger.default.svc.cluster.local:14250"
+#         tls:
+#           insecure: true
+
+#     service:
+#       pipelines:
+#         traces:
+#           receivers: [otlp]
+#           processors: []
+#           exporters: [jaeger]
+
+---
 
 
 apiVersion: apps/v1
 kind: Deployment
 
 metadata:
+  namespace: sidecar
   name: app-envoy-sidecar-deployment
   labels:
     app: app-envoy-sidecar
@@ -152,14 +187,53 @@ spec:
     # The imp stuff
     spec:
       containers:
-      - name: envoy-sidecar
-        image: envoy-sidecar-envoygateway:latest
-        imagePullPolicy: Never
+
+      # - name: envoy-jaeger
+      #   image: jaegertracing/all-in-one:latest
+      #   ports:
+      #       - containerPort: 5775
+      #         protocol: UDP
+      #       - containerPort: 6831
+      #         protocol: UDP
+      #       - containerPort: 6832
+      #         protocol: UDP
+      #       - containerPort: 5778
+      #         protocol: TCP
+      #       - containerPort: 16686
+      #         protocol: TCP
+      #       - containerPort: 9411
+      #         protocol: TCP
+      #       - containerPort: 4317
+      #         protocol: TCP
+      #       - containerPort: 4318
+      #         protocol: TCP
+      #   env:
+      #     - name: COLLECTOR_OTLP_ENABLED
+      #       value: "true"
+      #     - name: LOG_LEVEL
+      #       value: info      
+      - name: flask-service
+        image: envoyproxy/envoy:v1.24-latest
         ports:
           - containerPort: 9901
             name: envoy-admin
           - containerPort: 10000
             name: envoy-web
+        volumeMounts:
+          - name: envoy-config-volume
+            mountPath: /etc/envoy/
+        command: ["/usr/local/bin/envoy"]
+        args: ["-c", "/etc/envoy/config.yaml", "-l", "info","--service-cluster","flask-service","--service-node","flask-service", "--log-format", "[METADATA][%Y-%m-%d %T.%e][%t][%l][%n] %v"]
+
+      
+      # - name: envoy-sidecar
+      #   image: envoy-sidecar-envoygateway:latest
+      #   imagePullPolicy: Never
+      #   ports:
+      #     - containerPort: 9901
+      #       name: envoy-admin
+      #     - containerPort: 10000
+      #       name: envoy-web
 
       - name: flaskapi
         imagePullPolicy: Never
@@ -171,38 +245,42 @@ spec:
           - containerPort: 5000
             name: flaskapi
 
-      - name: open-collector
-        image: envoy-opentelemetry:latest
-        imagePullPolicy: Never
-        ports:
-          - containerPort: 4317
-            name: collector
-            
-      - name: envoy-prometheus
-        image: envoy-prometheus:latest
-        imagePullPolicy: Never
-        ports:
-          - containerPort: 9090
-            name: prometheus
-
-      # - name: openzipkin-zipkin
-      #   # imagePullPolicy: Never
-      #   image: openzipkin/zipkin:latest
-      #   env:
-      #     - name: port
-      #       value: "9411"
+      # - name: myappimage-sidecar
+      #   image: amitkewal/myappimage-sidecar:latest
       #   ports:
-      #     - containerPort: 9411
-      #       name: zipkin
+      #     - containerPort: 5200
+      
+      # - name: otel-collector
+      #   image: otel/opentelemetry-collector:latest
+      #   args: ["--config=/etc/otel-collector/otel-collector-config.yaml"]
+      #   volumeMounts:
+      #     - name: config-volume
+      #       mountPath: /etc/otel-collector/otel-collector-config.yaml
+      #       subPath: otel-collector
+      #   ports:
+      #     - containerPort: 4317
+      #       name: grpc
+      #     - containerPort: 55680
+      #       name: test
+      #     - containerPort: 4318
+      #       name: http       
 
-
-
+      volumes:
+        - name: envoy-config-volume
+          configMap:
+            name: envoy-config
+        - name: config-volume
+          configMap:
+            name: otel-collector-config
+        - name: log-volume
+          emptyDir: {}
 
 ---
 
 apiVersion: v1
 kind: Service
 metadata:
+  namespace: sidecar
   name: app-envoy-sidecar-svc
 spec:
   type: ClusterIP
@@ -217,10 +295,6 @@ spec:
       protocol: TCP
       port: 10000
       targetPort: 10000
-    - name: prometheus
-      protocol: TCP
-      port: 4317
-      targetPort: 4317
     - name: flaskapi
       protocol: TCP
       port: 5000
@@ -229,40 +303,20 @@ spec:
 
 ---
 
-apiVersion: v1
-kind: Service
-metadata:
-  name: opentelemetry
-spec:
-  type: ClusterIP
-  selector:
-    app: app-envoy-sidecar
-  ports:
-    - name: opetelemetry
-      protocol: TCP
-      port: 4317
-      targetPort: 4317
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: opentelemetry
+# spec:
+#   type: ClusterIP
+#   selector:
+#     app: app-envoy-sidecar
+#   ports:
+#     - name: opetelemetry
+#       protocol: TCP
+#       port: 4317
+#       targetPort: 4317
 
 
 
 
-
----
-
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: my-app
-spec:
-  ingressClassName: kong
-  rules:
-  - host: flaskapi.hello.com
-    http:
-      paths:
-      - path: /
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: app-envoy-sidecar-svc
-            port:
-              number: 10000

@@ -1,6 +1,14 @@
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: sidecar
+
+---
+
+apiVersion: v1
 kind: ConfigMap
 metadata:
+  namespace: sidecar
   name: kong-config
 data:
   kong.yaml: |
@@ -15,14 +23,13 @@ data:
          "config": {
          "policy": "local",
          "limit_by": "ip",
-         "minute": 100
+         "minute": 1
            }
         }]
         routes:
           - tags:
               &a1
-              - OAS3_import
-              - OAS3file_petstore.json
+              - my-test-service
             name: app-envoy-sidecar-svc-hello
             methods:
               - GET
@@ -38,12 +45,7 @@ data:
             strip_path: false
         tags: *a1
     upstreams:
-      - name: demo-upstream
-        targets:
-          - target: flaskapi.hello.com:10000
-        tags:
-          - OAS3_import
-          - OAS3file_petstore.json
+
 
 
 ---
@@ -51,6 +53,7 @@ data:
 apiVersion: v1
 kind: Service
 metadata:
+  namespace: sidecar
   name: kong-proxy
 spec:
   type: LoadBalancer
@@ -68,6 +71,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  namespace: sidecar
   name: kong-proxy-ssl
 spec:
   type: LoadBalancer
@@ -85,6 +89,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  namespace: sidecar
   name: kong-admin
 spec:
   type: LoadBalancer
@@ -102,6 +107,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  namespace: sidecar
   name: kong-admin-ssl
 spec:
   type: LoadBalancer
@@ -115,21 +121,6 @@ spec:
   selector:
     app: kong
 
-# ---
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: pod-service
-# spec:
-#   type: ClusterIP
-#   ports:
-#   - name: http
-#     port: 80
-#     targetPort: 8080
-#     protocol: TCP
-#   selector:
-#     app: demo-service
-
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -137,6 +128,7 @@ metadata:
   labels:
     app: kong
   name: kong
+  namespace: sidecar
 spec:
   replicas: 1
   selector:
